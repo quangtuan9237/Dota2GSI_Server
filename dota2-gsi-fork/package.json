@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "name": "dota2-gsi-fork",
+  "version": "1.0.1",
+  "dependencies": {
+    "express": "4.x.x",
+    "body-parser": "1.x.x",
+    "events": "1.x.x"
+  },
+  "description": "Forked version of Dota 2 Game State Integration server by xzion for dota2-spectating-helper",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

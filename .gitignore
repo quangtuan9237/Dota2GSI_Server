@@ -1,0 +1,7 @@
+/node_modules/*
+
+/cache/heroes/*
+/cache/items/*
+!/cache/heroes/.gitkeep
+!/cache/items/.gitkeep
+

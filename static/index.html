@@ -1,0 +1,185 @@
+﻿<!doctype html>
+<link rel="stylesheet" href="style.css">
+<meta charset="utf-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.5.1/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.0.5/vue.min.js"></script>
+
+<div id="app">
+    <div class="screen">
+        <div class="faction" :class="['radiant', 'dire'][factionIndex]" v-for="(faction, factionIndex) in factions">
+            <!--<h2>{{ getFactionName(factionIndex) }}</h2>-->
+            <div class="player" :class="playerIndex" v-for="(player, playerIndex) in faction.players" >
+                
+                    <div class="name">
+                        <span class="player-name">{{ player.name }}</span><br>
+                        <!--<span class="level">Level {{ faction.heroes[playerIndex].level }}</span>-->
+                    </div>
+                <div class="player-summary">
+                    <div class="hero-portrait">
+                        <img :class="faction.heroes[playerIndex].respawn_seconds ? 'dead' : ''" :src="`/image/hero/${ faction.heroes[playerIndex].name.replace('npc_dota_hero_', '') }.png`">
+                        <span class="respawn-timer" v-if="faction.heroes[playerIndex].respawn_seconds">{{ faction.heroes[playerIndex].respawn_seconds }}</span>
+                    </div>
+
+                    
+                    <dl class="scores">
+                        <dt>K/D/A</dt>
+                        <dd>{{ player.kills }}/{{ player.deaths }}/{{ player.assists }}</dd>
+                        <dt>LH/DN</dt>
+                        <dd>{{ player.last_hits }}/{{ player.denies }}</dd>
+                        <!--<dt>NW</dt>
+                        <dd>{{ player.net_worth }}</dd>
+                        <dt>GPM</dt>
+                        <dd>{{ player.gpm }}</dd>
+                        <dt>XPM</dt>
+                        <dd>{{ player.xpm }}</dd>
+                        <dt>HD</dt>
+                        <dd>{{ player.hero_damage }}</dd>-->
+                        <!--<dt>Buyback</dt>
+                        <dd class="buyback-status">
+                            <span v-if="map.game_time > faction.heroes[playerIndex].buyback_cooldown && goldLeftAfterBuyback(faction.heroes[playerIndex].level, faction.heroes[playerIndex].buyback_cost, player.gold_reliable, player.gold_unreliable) >= 0">
+                                <span class="yes">Yes</span>
+                            </span>
+                            <span v-else>
+                                <span class="no">No</span> (<span v-if="map.game_time < faction.heroes[playerIndex].buyback_cooldown">{{ formatTime(faction.heroes[playerIndex].buyback_cooldown - map.game_time) }}</span>
+                                <span v-if="goldLeftAfterBuyback(faction.heroes[playerIndex].level, faction.heroes[playerIndex].buyback_cost, player.gold_reliable, player.gold_unreliable) < 0">
+                                    {{ -goldLeftAfterBuyback(faction.heroes[playerIndex].level, faction.heroes[playerIndex].buyback_cost, player.gold_reliable, player.gold_unreliable) }}
+                                </span>)
+                            </span>
+                        </dd>-->
+                    </dl>
+
+
+                </div>
+
+                <div>
+                    <div class="items">
+                        <div class="item" :class="itemIndex < 9 ? 'inventory' : 'stash'" v-for="(item, itemKey, itemIndex) in faction.items[playerIndex]" v-if="itemIndex <= 2">
+                            <img :title="item.name" :class="item.name === 'empty' ? 'empty' : ''"
+                                 :src="item.name === 'empty' ? 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
+                                : `/image/item/${ /^item_recipe_/.test(item.name) ? 'recipe' : item.name.replace('item_', '') }.png`">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="items">
+                        <div class="item" :class="itemIndex < 9 ? 'inventory' : 'stash'" v-for="(item, itemKey, itemIndex) in faction.items[playerIndex]" v-if="itemIndex > 2 && itemIndex <= 5">
+                            <img :title="item.name" :class="item.name === 'empty' ? 'empty' : ''"
+                                 :src="item.name === 'empty' ? 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
+                                : `/image/item/${ /^item_recipe_/.test(item.name) ? 'recipe' : item.name.replace('item_', '') }.png`">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="items">
+                        <div class="item" :class="itemIndex < 9 ? 'inventory' : 'stash'" v-for="(item, itemKey, itemIndex) in faction.items[playerIndex]" v-if="itemIndex > 5">
+                            <img :title="item.name" :class="item.name === 'empty' ? 'empty' : ''"
+                                 :src="item.name === 'empty' ? 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
+                                : `/image/item/${ /^item_recipe_/.test(item.name) ? 'recipe' : item.name.replace('item_', '') }.png`">
+                        </div>
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+
+        <video id="video" autoplay></video>
+    </div>
+    <!--<div class="match">
+        <p>
+            Match ID:
+            {{ map.matchid }}
+        </p>
+    </div>-->
+</div>
+<script>
+    'use strict';
+
+    //global variables
+    var lastState = "";
+    var stateChange = false;
+    var isMoveIn = false;
+    var ClockTime = 0;
+    var index = 0;
+
+    // this function uses inaccurate way to handle 64 bit integer
+    let steamID64to32 = (steamID64) => steamID64.substr(3) - 61197960265728;
+    let formatTime = (secondsPast) => secondsPast ? `${(secondsPast / 60 | 0)}:${('0' + secondsPast % 60).slice(-2)}` : '-';
+    let toTitleCase = (str) => str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
+    let goldLeftAfterBuyback = (level, buybackCost, reliableGold, unreliableGold) =>
+        reliableGold + Math.max(0, unreliableGold - level * 30) - buybackCost;
+    let getFactionName = (factionIndex) => {
+        let factionName = ['radiant', 'dire'][factionIndex];
+        return vm.game[`${factionName}_team`] && vm.game[`${factionName}_team`].team_name ? vm.game[`${factionName}_team`].team_name : toTitleCase(factionName);
+    };
+
+    let vm = new Vue({
+        el: '#app',
+        data: { game: {}, map: {}, factions: {} }
+    });
+
+    let socket = io.connect(window.location.hostname + ':' + window.location.port);
+
+    function MoveIn() {
+        console.log("MoveIn");
+        document.getElementsByClassName("player" + index)[0].style.right = "-50px";
+        setTimeout(MoveOut, 5000);
+    }
+
+    function MoveOut() {
+        console.log("MoveOut");
+        document.getElementsByClassName("player" + index)[0].style.right = "-300px";
+        let moveIn = setTimeout(MoveIn, 2000);
+        if (index == 9) {
+            clearTimeout(moveIn);
+            index = 0;
+        } else {
+            index++;
+        }
+    }
+
+    socket.on('connect', () => {
+        console.log("connected to server");
+    });
+    socket.on('newdata', (newdata) => {
+        if (newdata.map) {
+            vm.map = newdata.map;
+            vm.factions = [
+                {
+                    heroes: newdata.hero.team2,
+                    players: newdata.player.team2,
+                    items: newdata.items.team2
+                },
+                {
+                    heroes: newdata.hero.team3,
+                    players: newdata.player.team3,
+                    items: newdata.items.team3
+                }
+            ];
+
+            var player1 = newdata["items"]["team2"]["player1"]["slot0"]["name"];
+            //console.log(newdata.map.clock_time);
+            //console.log(newdata.map.game_state);
+            ClockTime = newdata.map.clock_time;
+        }
+    });
+
+    setInterval(myfunction, 500)
+
+    function myfunction() {
+        var seconds = 5 * 60;
+        var dogshit = ClockTime % seconds;
+        console.log(dogshit);
+
+        if (dogshit == 0) {
+            if (isMoveIn == false) {
+                MoveIn();
+                isMoveIn = true;
+            }
+        } else {
+            isMoveIn = false;
+        }
+    }
+</script>
